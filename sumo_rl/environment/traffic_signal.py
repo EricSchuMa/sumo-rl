@@ -6,7 +6,6 @@ if 'SUMO_HOME' in os.environ:
     sys.path.append(tools)
 else:
     sys.exit("Please declare the environment variable 'SUMO_HOME'")
-import traci
 import numpy as np
 from gym import spaces
 
@@ -26,16 +25,20 @@ class TrafficSignal:
 
     Action space is which green phase is going to be open for the next delta_time seconds
     """
-    def __init__(self, 
-                env,
-                ts_id: List[str],
-                delta_time: int, 
-                yellow_time: int, 
-                min_green: int, 
-                max_green: int,
-                begin_time: int,
-                reward_fn: Union[str,Callable], 
-                sumo):
+
+    def __init__(self,
+                 env,
+                 ts_id: List[str],
+                 delta_time: int,
+                 yellow_time: int,
+                 min_green: int,
+                 max_green: int,
+                 begin_time: int,
+                 reward_fn: Union[str, Callable],
+                 observation_fn: str,
+                 observation_c: float,
+                 sumo,
+                 ):
         self.id = ts_id
         self.env = env
         self.delta_time = delta_time
@@ -49,6 +52,8 @@ class TrafficSignal:
         self.last_measure = 0.0
         self.last_reward = None
         self.reward_fn = reward_fn
+        self.observation_fn = observation_fn
+        self.observation_c = observation_c
         self.sumo = sumo
 
         self.build_phases()
@@ -56,14 +61,9 @@ class TrafficSignal:
         self.lanes = list(dict.fromkeys(self.sumo.trafficlight.getControlledLanes(self.id)))  # Remove duplicates and keep order
         self.out_lanes = [link[0][1] for link in self.sumo.trafficlight.getControlledLinks(self.id) if link]
         self.out_lanes = list(set(self.out_lanes))
-        self.lanes_lenght = {lane: self.sumo.lane.getLength(lane) for lane in self.lanes}
+        self.lanes_length = {lane: self.sumo.lane.getLength(lane) for lane in self.lanes}
 
-        self.observation_space = spaces.Box(low=np.zeros(self.num_green_phases+1+2*len(self.lanes), dtype=np.float32), high=np.ones(self.num_green_phases+1+2*len(self.lanes), dtype=np.float32))
-        self.discrete_observation_space = spaces.Tuple((
-            spaces.Discrete(self.num_green_phases),                       # Green Phase
-            spaces.Discrete(2),                                           # Binary variable active if min_green seconds already elapsed
-            *(spaces.Discrete(10) for _ in range(2*len(self.lanes)))      # Density and stopped-density for each lane
-        ))
+        self.observation_space, self.n_feats = self.get_observation_space()
         self.action_space = spaces.Discrete(self.num_green_phases)
 
     def build_phases(self):
@@ -131,13 +131,13 @@ class TrafficSignal:
             self.time_since_last_phase_change = 0
     
     def compute_observation(self):
-        phase_id = [1 if self.green_phase == i else 0 for i in range(self.num_green_phases)]  # one-hot encoding
-        min_green = [0 if self.time_since_last_phase_change < self.min_green + self.yellow_time else 1]
-        density = self.get_lanes_density()
-        queue = self.get_lanes_queue()
-        observation = np.array(phase_id + min_green + density + queue, dtype=np.float32)
-        return observation
-            
+        if self.observation_fn == 'dtse':
+            return self._dtse_observation()
+        elif self.observation_fn == 'density-queue':
+            return self._density_queue_observation()
+        else:
+            raise NotImplementedError(f'Observation function {self.observation_fn} not implemented')
+
     def compute_reward(self):
         if type(self.reward_fn) is str:
             if self.reward_fn == 'diff-waiting-time':
@@ -153,7 +153,37 @@ class TrafficSignal:
         else:
             self.last_reward = self.reward_fn(self)
         return self.last_reward
-    
+
+    def _density_queue_observation(self):
+        phase_id = [1 if self.green_phase == i else 0 for i in range(self.num_green_phases)]  # one-hot encoding
+        density = self.get_lanes_density()
+        queue = self.get_lanes_queue()
+        observation = np.array(phase_id + density + queue, dtype=np.float32)
+        return observation
+
+    def _dtse_observation(self):
+        phase_id = [1 if self.green_phase == i else 0 for i in range(self.num_green_phases)]  # one-hot encoding
+        observation = np.array([phase_id], dtype=np.float32)
+        for lane in self.lanes:
+            vehs = self.sumo.lane.getLastStepVehicleIDs(lane)
+            positions = (np.array(
+                [self.sumo.vehicle.getLanePosition(veh) for veh in vehs]) / self.observation_c).astype(int)
+            speeds = np.array([self.sumo.vehicle.getSpeed(veh) for veh in vehs])
+
+            # generate the dtse arrays from position and speed
+            dtse_counts, _ = np.histogram(positions, bins=range(self.n_feats + 1))
+            dtse_speeds = np.zeros(self.n_feats, dtype=np.float32)
+            for speed, pos in zip(speeds, positions):
+                dtse_speeds[pos] += (speed / dtse_counts[pos])
+
+            # normalize and clip speeds and occupancies
+            normalized_speeds = np.clip(dtse_speeds / self.sumo.lane.getMaxSpeed(lane), 0, 1)
+            densities = np.clip(dtse_counts.astype(np.float32) / (self.observation_c / 7.5), 0, 1)
+
+            observation = np.append(observation, normalized_speeds)
+            observation = np.append(observation, densities)
+        return observation
+
     def _pressure_reward(self):
         return -self.get_pressure()
     
@@ -183,6 +213,23 @@ class TrafficSignal:
         reward = -ts_wait
         self.last_measure = ts_wait
         return reward
+
+    def get_observation_space(self):
+        if self.observation_fn == 'dtse':
+            # all lanes must have equal length for DTSE features
+            assert len(set(list(self.lanes_length.values()))) == 1
+            lane_length = list(self.lanes_length.values())[0]
+            n_feats = int(np.ceil(lane_length / self.observation_c))
+        elif self.observation_fn == 'density-queue':
+            n_feats = 1
+        else:
+            raise NotImplementedError(f'Observation function {self.observation_fn} not implemented')
+
+        observation_space = spaces.Box(
+            low=np.zeros(self.num_green_phases + 2 * n_feats * len(self.lanes), dtype=np.float32),
+            high=np.ones(self.num_green_phases + 2 * n_feats * len(self.lanes), dtype=np.float32))
+
+        return observation_space, n_feats
 
     def get_waiting_time_per_lane(self):
         wait_time_per_lane = []
@@ -218,11 +265,11 @@ class TrafficSignal:
 
     def get_lanes_density(self):
         vehicle_size_min_gap = 7.5  # 5(vehSize) + 2.5(minGap)
-        return [min(1, self.sumo.lane.getLastStepVehicleNumber(lane) / (self.lanes_lenght[lane] / vehicle_size_min_gap)) for lane in self.lanes]
+        return [min(1, self.sumo.lane.getLastStepVehicleNumber(lane) / (self.lanes_length[lane] / vehicle_size_min_gap)) for lane in self.lanes]
 
     def get_lanes_queue(self):
         vehicle_size_min_gap = 7.5  # 5(vehSize) + 2.5(minGap)
-        return [min(1, self.sumo.lane.getLastStepHaltingNumber(lane) / (self.lanes_lenght[lane] / vehicle_size_min_gap)) for lane in self.lanes]
+        return [min(1, self.sumo.lane.getLastStepHaltingNumber(lane) / (self.lanes_length[lane] / vehicle_size_min_gap)) for lane in self.lanes]
     
     def get_total_queued(self):
         return sum(self.sumo.lane.getLastStepHaltingNumber(lane) for lane in self.lanes)

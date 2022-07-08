@@ -73,6 +73,8 @@ class SumoEnvironment(gym.Env):
         max_green: int = 50, 
         single_agent: bool = False,
         reward_fn: Union[str,Callable] = 'diff-waiting-time',
+        observation_fn: str = 'density-queue',
+        observation_c: Optional[float] = 30,
         sumo_seed: Union[str,int] = 'random', 
         fixed_ts: bool = False,
         sumo_warnings: bool = True,
@@ -99,6 +101,8 @@ class SumoEnvironment(gym.Env):
         self.yellow_time = yellow_time
         self.single_agent = single_agent
         self.reward_fn = reward_fn
+        self.observation_fn = observation_fn
+        self.observation_c = observation_c
         self.sumo_seed = sumo_seed
         self.fixed_ts = fixed_ts
         self.sumo_warnings = sumo_warnings
@@ -113,14 +117,16 @@ class SumoEnvironment(gym.Env):
             traci.start([sumolib.checkBinary('sumo'), '-n', self._net], label='init_connection'+self.label)
             conn = traci.getConnection('init_connection'+self.label)
         self.ts_ids = list(conn.trafficlight.getIDList())
-        self.traffic_signals = {ts: TrafficSignal(self, 
-                                                  ts, 
+        self.traffic_signals = {ts: TrafficSignal(self,
+                                                  ts,
                                                   self.delta_time, 
                                                   self.yellow_time, 
                                                   self.min_green, 
                                                   self.max_green, 
                                                   self.begin_time,
                                                   self.reward_fn,
+                                                  self.observation_fn,
+                                                  self.observation_c,
                                                   conn) for ts in self.ts_ids}
         conn.close()
 
@@ -188,6 +194,8 @@ class SumoEnvironment(gym.Env):
                                                   self.max_green, 
                                                   self.begin_time,
                                                   self.reward_fn,
+                                                  self.observation_fn,
+                                                  self.observation_c,
                                                   self.sumo) for ts in self.ts_ids}
         self.vehicles = dict()
 
