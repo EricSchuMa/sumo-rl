@@ -148,6 +148,8 @@ class TrafficSignal:
                 self.last_reward = self._queue_reward()
             elif self.reward_fn == 'pressure':
                 self.last_reward = self._pressure_reward()
+            elif self.reward_fn == 'brake':
+                self.last_reward = self._brake_reward()
             else:
                 raise NotImplementedError(f'Reward function {self.reward_fn} not implemented')
         else:
@@ -192,6 +194,9 @@ class TrafficSignal:
 
     def _queue_reward(self):
         return -self.get_total_queued()
+
+    def _brake_reward(self):
+        return self.get_total_braking()
 
     def _diff_waiting_time_reward(self):
         ts_wait = sum(self.get_waiting_time_per_lane()) / 100.0
@@ -273,6 +278,11 @@ class TrafficSignal:
     
     def get_total_queued(self):
         return sum(self.sumo.lane.getLastStepHaltingNumber(lane) for lane in self.lanes)
+
+    def get_total_braking(self):
+        accelerations = np.array([self.sumo.vehicle.getAcceleration(v) for v in self._get_veh_list()])
+        brake = np.sum(accelerations[accelerations < 0])
+        return brake
 
     def _get_veh_list(self):
         veh_list = []
