@@ -275,7 +275,10 @@ class TrafficSignal:
     def get_lanes_queue(self):
         vehicle_size_min_gap = 7.5  # 5(vehSize) + 2.5(minGap)
         return [min(1, self.sumo.lane.getLastStepHaltingNumber(lane) / (self.lanes_length[lane] / vehicle_size_min_gap)) for lane in self.lanes]
-    
+
+    def get_total_emission(self):
+        return sum(self.sumo.vehicle.getCO2Emission(veh) for veh in self._get_veh_list())
+
     def get_total_queued(self):
         return sum(self.sumo.lane.getLastStepHaltingNumber(lane) for lane in self.lanes)
 
