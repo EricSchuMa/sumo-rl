@@ -296,7 +296,9 @@ class SumoEnvironment(gym.Env):
             'step_time': self.sim_step,
             'reward': self.traffic_signals[self.ts_ids[0]].last_reward,
             'total_stopped': sum(self.traffic_signals[ts].get_total_queued() for ts in self.ts_ids),
-            'total_wait_time': sum(sum(self.traffic_signals[ts].get_waiting_time_per_lane()) for ts in self.ts_ids)
+            'total_wait_time': sum(sum(self.traffic_signals[ts].get_waiting_time_per_lane()) for ts in self.ts_ids),
+            'total_CO2_emission': sum(self.traffic_signals[ts].get_total_emission() for ts in self.ts_ids),
+            'average_speed': np.mean(np.array([self.traffic_signals[ts].get_average_speed() for ts in self.ts_ids])),
         }
 
     def close(self):
