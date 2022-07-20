@@ -72,7 +72,8 @@ class SumoEnvironment(gym.Env):
         min_green: int = 5, 
         max_green: int = 50, 
         single_agent: bool = False,
-        reward_fn: Union[str,Callable] = 'diff-waiting-time',
+        reward_fn: Union[str, Callable] = 'diff-waiting-time',
+        reward_norm_ranges: Optional[dict] = {},
         observation_fn: str = 'density-queue',
         observation_c: Optional[float] = 30,
         sumo_seed: Union[str,int] = 'random', 
@@ -101,6 +102,7 @@ class SumoEnvironment(gym.Env):
         self.yellow_time = yellow_time
         self.single_agent = single_agent
         self.reward_fn = reward_fn
+        self.reward_norm_ranges = reward_norm_ranges
         self.observation_fn = observation_fn
         self.observation_c = observation_c
         self.sumo_seed = sumo_seed
@@ -125,6 +127,7 @@ class SumoEnvironment(gym.Env):
                                                   self.max_green, 
                                                   self.begin_time,
                                                   self.reward_fn,
+                                                  self.reward_norm_ranges,
                                                   self.observation_fn,
                                                   self.observation_c,
                                                   conn) for ts in self.ts_ids}
@@ -194,6 +197,7 @@ class SumoEnvironment(gym.Env):
                                                   self.max_green, 
                                                   self.begin_time,
                                                   self.reward_fn,
+                                                  self.reward_norm_ranges,
                                                   self.observation_fn,
                                                   self.observation_c,
                                                   self.sumo) for ts in self.ts_ids}

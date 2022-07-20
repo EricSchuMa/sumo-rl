@@ -1,6 +1,9 @@
 import os
 import sys
 from typing import Callable, List, Union
+
+from sumo_rl.util.normalization import normalize_reward
+
 if 'SUMO_HOME' in os.environ:
     tools = os.path.join(os.environ['SUMO_HOME'], 'tools')
     sys.path.append(tools)
@@ -35,6 +38,7 @@ class TrafficSignal:
                  max_green: int,
                  begin_time: int,
                  reward_fn: Union[str, Callable],
+                 reward_norm_ranges: dict,
                  observation_fn: str,
                  observation_c: float,
                  sumo,
@@ -52,6 +56,7 @@ class TrafficSignal:
         self.last_measure = 0.0
         self.last_reward = None
         self.reward_fn = reward_fn
+        self.reward_norm_ranges = reward_norm_ranges
         self.observation_fn = observation_fn
         self.observation_c = observation_c
         self.sumo = sumo
@@ -150,10 +155,14 @@ class TrafficSignal:
                 self.last_reward = self._pressure_reward()
             elif self.reward_fn == 'brake':
                 self.last_reward = self._brake_reward()
+            elif self.reward_fn == 'emission':
+                self.last_reward = self._emission_reward()
             else:
                 raise NotImplementedError(f'Reward function {self.reward_fn} not implemented')
         else:
             self.last_reward = self.reward_fn(self)
+        if self.reward_norm_ranges:
+            self.last_reward = normalize_reward(self.last_reward, sample_range=self.reward_norm_ranges[self.reward_fn])
         return self.last_reward
 
     def _density_queue_observation(self):
@@ -199,7 +208,7 @@ class TrafficSignal:
         return self.get_total_braking()
 
     def _diff_waiting_time_reward(self):
-        ts_wait = sum(self.get_waiting_time_per_lane()) / 100.0
+        ts_wait = sum(self.get_waiting_time_per_lane())
         reward = self.last_measure - ts_wait
         self.last_measure = ts_wait
         return reward
@@ -218,6 +227,9 @@ class TrafficSignal:
         reward = -ts_wait
         self.last_measure = ts_wait
         return reward
+
+    def _emission_reward(self):
+        return - self.get_total_emission()
 
     def get_observation_space(self):
         if self.observation_fn == 'dtse':
