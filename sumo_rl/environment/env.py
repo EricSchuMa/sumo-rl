@@ -12,6 +12,8 @@ import numpy as np
 import pandas as pd
 import sumolib
 import traci
+import tempfile
+import xml.etree.cElementTree as elementTree
 from gym.envs.registration import EnvSpec
 from gym.utils import EzPickle, seeding
 from pettingzoo import AECEnv
@@ -79,6 +81,7 @@ class SumoEnvironment(gym.Env):
         sumo_seed: Union[str,int] = 'random', 
         fixed_ts: bool = False,
         sumo_warnings: bool = True,
+        record_trip_info: bool = False,
     ):
         self._net = net_file
         self._route = route_file
@@ -108,6 +111,8 @@ class SumoEnvironment(gym.Env):
         self.sumo_seed = sumo_seed
         self.fixed_ts = fixed_ts
         self.sumo_warnings = sumo_warnings
+        self.record_trip_info = record_trip_info
+        self.last_trip_info = []
         self.label = str(SumoEnvironment.CONNECTION_LABEL)
         SumoEnvironment.CONNECTION_LABEL += 1
         self.sumo = None
@@ -167,6 +172,9 @@ class SumoEnvironment(gym.Env):
                 self.disp = SmartDisplay(size=self.virtual_display)
                 self.disp.start()
                 print("Virtual display started.")
+        if self.record_trip_info:
+            self.trip_file = tempfile.NamedTemporaryFile()
+            sumo_cmd.extend(['--tripinfo-output', self.trip_file.name])
 
         if LIBSUMO:
             traci.start(sumo_cmd)
@@ -181,6 +189,7 @@ class SumoEnvironment(gym.Env):
     def reset(self, seed: Optional[int] = None, return_info=False, **kwargs):
         if self.run != 0:
             self.close()
+            self.last_trip_info = self._collect_trip_info()
             self.save_csv(self.out_csv_name, self.run)
         self.run += 1
         self.metrics = []
@@ -336,6 +345,25 @@ class SumoEnvironment(gym.Env):
             df = pd.DataFrame(self.metrics)
             Path(Path(out_csv_name).parent).mkdir(parents=True, exist_ok=True)
             df.to_csv(out_csv_name + '_conn{}_run{}'.format(self.label, run) + '.csv', index=False)
+
+    def _collect_trip_info(self):
+        if self.record_trip_info:
+            tree = elementTree.ElementTree(file=self.trip_file)
+            trip_infos = []
+            for child in tree.getroot():
+                trip = child.attrib
+                trip_info = {'id': trip['id'],
+                             'depart_sec': trip['depart'],
+                             'arrival_sec': trip['arrival'],
+                             'duration_sec': trip['duration'],
+                             'timeLoss_sec': trip['timeLoss'],
+                             'wait_step': trip['waitingCount'],
+                             'wait_sec': trip['waitingTime'],
+                             }
+                trip_infos.append(trip_info)
+            return trip_infos
+        else:
+            return []
 
     # Below functions are for discrete state space
 
