@@ -161,7 +161,7 @@ class TrafficSignal:
                 raise NotImplementedError(f'Reward function {self.reward_fn} not implemented')
         else:
             self.last_reward = self.reward_fn(self)
-        if self.reward_norm_ranges:
+        if any(self.reward_norm_ranges.values()):
             self.last_reward = normalize_reward(self.last_reward, sample_range=self.reward_norm_ranges[self.reward_fn])
         return self.last_reward
 
