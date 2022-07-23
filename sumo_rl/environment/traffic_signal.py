@@ -159,11 +159,13 @@ class TrafficSignal:
                 self.last_reward = self._emission_reward()
             else:
                 raise NotImplementedError(f'Reward function {self.reward_fn} not implemented')
+            if any(self.reward_norm_ranges.values()):
+                self.last_reward = normalize_reward(self.last_reward,
+                                                    sample_range=self.reward_norm_ranges[self.reward_fn])
+                return self.last_reward
         else:
             self.last_reward = self.reward_fn(self)
-        if any(self.reward_norm_ranges.values()):
-            self.last_reward = normalize_reward(self.last_reward, sample_range=self.reward_norm_ranges[self.reward_fn])
-        return self.last_reward
+            return self.last_reward
 
     def _density_queue_observation(self):
         phase_id = [1 if self.green_phase == i else 0 for i in range(self.num_green_phases)]  # one-hot encoding
