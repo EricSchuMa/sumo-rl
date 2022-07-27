@@ -145,9 +145,9 @@ class TrafficSignal:
 
     def compute_reward(self):
         if type(self.reward_fn) is str:
-            if self.reward_fn == 'diff-waiting-time':
+            if self.reward_fn == 'diff_waiting_time':
                 self.last_reward = self._diff_waiting_time_reward()
-            elif self.reward_fn == 'average-speed':
+            elif self.reward_fn == 'average_speed':
                 self.last_reward = self._average_speed_reward()
             elif self.reward_fn == 'queue':
                 self.last_reward = self._queue_reward()
