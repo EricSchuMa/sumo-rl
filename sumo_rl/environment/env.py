@@ -74,7 +74,7 @@ class SumoEnvironment(gym.Env):
         min_green: int = 5, 
         max_green: int = 50, 
         single_agent: bool = False,
-        reward_fn: Union[str, Callable] = 'diff-waiting-time',
+        reward_fn: Union[str, Callable] = 'diff_waiting_time',
         reward_norm_ranges: Optional[dict] = {},
         observation_fn: str = 'density-queue',
         observation_c: Optional[float] = 30,
