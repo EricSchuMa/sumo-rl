@@ -164,8 +164,7 @@ class TrafficSignal:
                                                     sample_range=self.reward_norm_ranges[self.reward_fn])
             return self.last_reward
         else:
-            self.last_reward = self.reward_fn(self)
-            return self.last_reward
+            return self.reward_fn(self)
 
     def _density_queue_observation(self):
         phase_id = [1 if self.green_phase == i else 0 for i in range(self.num_green_phases)]  # one-hot encoding
