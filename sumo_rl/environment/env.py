@@ -17,10 +17,11 @@ import xml.etree.cElementTree as elementTree
 from gym.envs.registration import EnvSpec
 from gym.utils import EzPickle, seeding
 from pettingzoo import AECEnv
-from pettingzoo.utils import agent_selector, wrappers
+from pettingzoo.utils import wrappers
 from pettingzoo.utils.agent_selector import agent_selector
 from pettingzoo.utils.conversions import parallel_wrapper_fn
 
+from blrl.reward_model import generate_reward_model_from_config
 from .traffic_signal import TrafficSignal
 
 LIBSUMO = 'LIBSUMO_AS_TRACI' in os.environ
@@ -78,10 +79,12 @@ class SumoEnvironment(gym.Env):
         reward_norm_ranges: Optional[dict] = {},
         observation_fn: str = 'density-queue',
         observation_c: Optional[float] = 30,
-        sumo_seed: Union[str,int] = 'random', 
+        sumo_seed: Union[str, int] = 'random',
         fixed_ts: bool = False,
         sumo_warnings: bool = True,
         record_trip_info: bool = False,
+        reward_config=None,
+        norm_config=None,
     ):
         self._net = net_file
         self._route = route_file
@@ -116,6 +119,10 @@ class SumoEnvironment(gym.Env):
         self.label = str(SumoEnvironment.CONNECTION_LABEL)
         SumoEnvironment.CONNECTION_LABEL += 1
         self.sumo = None
+        if reward_config:
+            self.reward_model = generate_reward_model_from_config(norm_config=norm_config,
+                                                                  reward_config=reward_config,
+                                                                  learnable=False)
 
         if LIBSUMO:
             traci.start([sumolib.checkBinary('sumo'), '-n', self._net])  # Start only to retrieve traffic light information
@@ -313,6 +320,10 @@ class SumoEnvironment(gym.Env):
             'total_CO2_emission': sum(self.traffic_signals[ts].get_total_emission() for ts in self.ts_ids),
             'average_speed': np.mean(np.array([self.traffic_signals[ts].get_average_speed() for ts in self.ts_ids])),
         }
+
+    def compute_sub_rewards(self):
+        # currently only works for single TL
+        return self.reward_model.compute_sub_rewards(self.traffic_signals[self.ts_ids[0]])
 
     def close(self):
         if self.sumo is None:
