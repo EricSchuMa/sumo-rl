@@ -200,7 +200,7 @@ class TrafficSignal:
         return -self.get_pressure()
     
     def _average_speed_reward(self):
-        return self.get_average_speed()
+        return self.get_average_speed() - 1
 
     def _queue_reward(self):
         return -self.get_total_queued()
