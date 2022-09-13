@@ -147,6 +147,8 @@ class TrafficSignal:
         if type(self.reward_fn) is str:
             if self.reward_fn == 'diff_waiting_time':
                 self.last_reward = self._diff_waiting_time_reward()
+            if self.reward_fn == 'wait':
+                self.last_reward = self._wait_reward()
             elif self.reward_fn == 'average_speed':
                 self.last_reward = self._average_speed_reward()
             elif self.reward_fn == 'queue':
@@ -213,6 +215,9 @@ class TrafficSignal:
         reward = self.last_measure - ts_wait
         self.last_measure = ts_wait
         return reward
+
+    def _wait_reward(self):
+        return - np.mean(self.get_waiting_time_per_lane())
 
     def _waiting_time_reward2(self):
         ts_wait = sum(self.get_waiting_time())
