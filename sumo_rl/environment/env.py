@@ -21,7 +21,7 @@ from pettingzoo.utils import wrappers
 from pettingzoo.utils.agent_selector import agent_selector
 from pettingzoo.utils.conversions import parallel_wrapper_fn
 
-from blrl.reward_model import generate_reward_model_from_config
+from reward.reward_model import generate_reward_model_from_config
 from .traffic_signal import TrafficSignal
 
 LIBSUMO = 'LIBSUMO_AS_TRACI' in os.environ
