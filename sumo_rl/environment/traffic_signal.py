@@ -157,6 +157,8 @@ class TrafficSignal:
                 self.last_reward = self._pressure_reward()
             elif self.reward_fn == 'brake':
                 self.last_reward = self._brake_reward()
+            elif self.reward_fn == 'acceleration':
+                self.last_reward = self._acceleration_reward()
             elif self.reward_fn == 'emission':
                 self.last_reward = self._emission_reward()
             else:
@@ -209,6 +211,9 @@ class TrafficSignal:
 
     def _brake_reward(self):
         return self.get_total_braking()
+
+    def _acceleration_reward(self):
+        return self.get_total_acceleration()
 
     def _diff_waiting_time_reward(self):
         ts_wait = sum(self.get_waiting_time_per_lane())
@@ -304,6 +309,11 @@ class TrafficSignal:
         accelerations = np.array([self.sumo.vehicle.getAcceleration(v) for v in self._get_veh_list()])
         brake = np.sum(accelerations[accelerations < 0])
         return brake
+
+    def get_total_acceleration(self):
+        accelerations = np.array([self.sumo.vehicle.getAcceleration(v) for v in self._get_veh_list()])
+        accel = np.sum(accelerations[accelerations > 0])
+        return accel
 
     def _get_veh_list(self):
         veh_list = []
